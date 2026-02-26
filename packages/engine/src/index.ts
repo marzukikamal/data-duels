@@ -63,7 +63,10 @@ export const injectAnomaly = (
     const target = index + offset;
     if (target >= 0 && target < output.length) {
       const weight = 1 - Math.abs(offset) / (spread + 1);
-      output[target].value += magnitude * weight;
+      const targetPoint = output[target];
+      if (targetPoint) {
+        targetPoint.value += magnitude * weight;
+      }
     }
   }
 
