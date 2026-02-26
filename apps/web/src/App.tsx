@@ -8,18 +8,15 @@ const App = () => {
     lastQuery,
     dataset,
     results,
-    score,
-    round,
-    history,
-    leaderboard,
+    resultStatus,
+    attemptUsed,
+    challengeKey,
     isRunning,
     error,
     start,
     updateSql,
     runSql,
-    scoreRun,
-    nextRound,
-    resetMatch,
+    submitAnswer,
   } = useAppStore();
 
   return (
@@ -29,11 +26,11 @@ const App = () => {
           <div className="max-w-2xl text-center">
             <p className="text-xs uppercase tracking-[0.4em] text-zinc-500">Data Duels</p>
             <h1 className="mt-4 text-4xl font-semibold tracking-tight text-zinc-100">
-              Incident Triage Arena
+              Daily Incident Triage
             </h1>
             <p className="mt-4 text-sm text-zinc-400">
-              You are the on-call data analyst. Use SQL to identify the most urgent incidents
-              across services. Your query is scored on accuracy and efficiency.
+              One mission per day. Use SQL to identify the exact incidents that need escalation.
+              You only get one official submission.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <button
@@ -51,9 +48,9 @@ const App = () => {
       <header className="border-b border-zinc-800/70">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-zinc-500">Ops Arena</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-zinc-500">Daily Challenge</p>
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-            <p className="mt-1 text-xs text-zinc-500">Incident Triage - Round {round}</p>
+            <p className="mt-1 text-xs text-zinc-500">Challenge #{challengeKey}</p>
           </div>
           <div className="flex gap-3">
             <button
@@ -62,30 +59,17 @@ const App = () => {
                 void runSql();
               }}
               type="button"
-              disabled={isRunning}
+              disabled={isRunning || attemptUsed}
             >
               {isRunning ? 'Running...' : 'Run SQL'}
             </button>
             <button
-              className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs uppercase tracking-widest text-emerald-300 transition hover:border-emerald-400"
-              onClick={scoreRun}
+              className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs uppercase tracking-widest text-emerald-300 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={submitAnswer}
               type="button"
+              disabled={attemptUsed}
             >
-              Score Run
-            </button>
-            <button
-              className="rounded-full border border-sky-500/60 px-4 py-2 text-xs uppercase tracking-widest text-sky-300 transition hover:border-sky-400"
-              onClick={nextRound}
-              type="button"
-            >
-              Next Round
-            </button>
-            <button
-              className="rounded-full border border-rose-500/60 px-4 py-2 text-xs uppercase tracking-widest text-rose-300 transition hover:border-rose-400"
-              onClick={resetMatch}
-              type="button"
-            >
-              Reset Match
+              Submit Answer
             </button>
           </div>
         </div>
@@ -96,9 +80,8 @@ const App = () => {
           <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
             <h2 className="text-lg font-semibold">Mission Brief</h2>
             <p className="mt-2 text-sm text-zinc-400">
-              Identify high-impact incidents affecting critical services. Return the incident rows
-              that should be escalated to the on-call lead. Score balances accuracy with query
-              efficiency.
+              Identify the exact set of incidents that must be escalated today. The daily solution
+              is unique; any missing or extra incident fails the submission.
             </p>
             <div className="mt-4 grid gap-3 text-sm text-zinc-300">
               <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
@@ -106,9 +89,6 @@ const App = () => {
               </div>
               <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
                 Signals: error_rate, duration_min, affected_users
-              </div>
-              <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
-                Goal: find critical and high severity incidents with elevated error rate
               </div>
               <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
                 Dataset size: {dataset.length} incidents
@@ -129,11 +109,12 @@ const App = () => {
                 className="h-48 w-full resize-none bg-transparent text-sm text-zinc-100 outline-none"
                 value={sql}
                 onChange={(event) => updateSql(event.target.value)}
+                disabled={attemptUsed}
               />
             </div>
             <p className="mt-3 text-xs text-zinc-500">
               Example: SELECT * FROM incidents WHERE severity IN (&apos;critical&apos;,&apos;high&apos;)
-              AND error_rate &gt;= 0.08 ORDER BY error_rate DESC LIMIT 10;
+              AND error_rate &gt;= 0.08 ORDER BY error_rate DESC;
             </p>
             {error && (
               <div className="mt-4 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
@@ -190,86 +171,15 @@ const App = () => {
 
         <section className="space-y-6">
           <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
-            <h3 className="text-base font-semibold">Scoreboard</h3>
-            <div className="mt-4 grid gap-3">
-              <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
-                <p className="text-xs uppercase tracking-widest text-zinc-500">Score</p>
-                <p className="mt-2 text-2xl font-semibold text-emerald-300">
-                  {score ? score.score.toFixed(2) : '-'}
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
-                  <p className="text-[10px] uppercase tracking-widest text-zinc-500">Precision</p>
-                  <p className="mt-2 text-sm text-zinc-100">
-                    {score ? score.precision.toFixed(2) : '-'}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
-                  <p className="text-[10px] uppercase tracking-widest text-zinc-500">Recall</p>
-                  <p className="mt-2 text-sm text-zinc-100">
-                    {score ? score.recall.toFixed(2) : '-'}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
-                  <p className="text-[10px] uppercase tracking-widest text-zinc-500">Efficiency</p>
-                  <p className="mt-2 text-sm text-zinc-100">
-                    {score ? score.efficiency.toFixed(2) : '-'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold">Leaderboard</h3>
-              <span className="text-xs uppercase tracking-widest text-zinc-500">Top 5</span>
-            </div>
-            <div className="mt-4 space-y-3">
-              {leaderboard.map((entry, index) => (
-                <div
-                  key={`${entry.name}-${entry.round}-${index}`}
-                  className="flex items-center justify-between rounded-2xl border border-zinc-800/70 bg-zinc-950/60 px-4 py-3 text-sm"
-                >
-                  <span className="text-zinc-200">
-                    {index + 1}. {entry.name}
-                  </span>
-                  <span className="text-emerald-300">{entry.score.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold">Round History</h3>
-              <span className="text-xs uppercase tracking-widest text-zinc-500">
-                {history.length} Rounds
-              </span>
-            </div>
-            <div className="mt-4 space-y-3">
-              {history.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-zinc-800/70 bg-zinc-950/40 p-4 text-sm text-zinc-500">
-                  Score a round to capture metrics.
-                </div>
-              )}
-              {history.map((entry) => (
-                <div
-                  key={`round-${entry.round}`}
-                  className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 px-4 py-3 text-sm"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-200">Round {entry.round}</span>
-                    <span className="text-emerald-300">{entry.score.toFixed(2)}</span>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-                    <span>Precision {entry.precision.toFixed(2)}</span>
-                    <span>Recall {entry.recall.toFixed(2)}</span>
-                    <span>Efficiency {entry.efficiency.toFixed(2)}</span>
-                  </div>
-                </div>
-              ))}
+            <h3 className="text-base font-semibold">Daily Result</h3>
+            <p className="mt-3 text-sm text-zinc-400">
+              {resultStatus === 'pending' &&
+                'Submit once per day. Your answer must match the exact incident set.'}
+              {resultStatus === 'correct' && 'Correct. You nailed today\'s triage.'}
+              {resultStatus === 'incorrect' && 'Incorrect. Come back tomorrow for a new mission.'}
+            </p>
+            <div className="mt-4 rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4 text-xs text-zinc-400">
+              Attempts left today: {attemptUsed ? '0' : '1'}
             </div>
           </div>
         </section>

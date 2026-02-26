@@ -10,12 +10,7 @@ type Incident = {
   affectedUsers: number;
 };
 
-type ScoreResult = {
-  score: number;
-  precision: number;
-  recall: number;
-  efficiency: number;
-};
+type ResultStatus = 'pending' | 'correct' | 'incorrect';
 
 type AppState = {
   title: string;
@@ -27,16 +22,13 @@ type AppState = {
   dataset: Incident[];
   expectedIds: Set<string>;
   results: Incident[];
-  score: ScoreResult | null;
-  round: number;
-  history: Array<ScoreResult & { round: number }>;
-  leaderboard: Array<{ name: string; score: number; round: number }>;
+  resultStatus: ResultStatus;
+  attemptUsed: boolean;
+  challengeKey: string;
   start: () => void;
   updateSql: (sql: string) => void;
   runSql: () => Promise<void>;
-  scoreRun: () => void;
-  nextRound: () => void;
-  resetMatch: () => void;
+  submitAnswer: () => void;
 };
 
 const services = ['payments', 'auth', 'search', 'analytics', 'checkout', 'profile'] as const;
@@ -57,28 +49,54 @@ type ParsedQuery = {
   complexity: number;
 };
 
+const defaultSql = `-- Incident Triage (Daily)
+-- Table: incidents(id, service, severity, duration_min, error_rate, affected_users)
+SELECT id, service, severity, duration_min, error_rate, affected_users
+FROM incidents
+WHERE severity IN ('critical', 'high')
+  AND service IN ('payments', 'auth')
+  AND error_rate >= 0.08
+  AND duration_min >= 30
+ORDER BY error_rate DESC;`;
+
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
-const randomInt = (min: number, max: number): number =>
-  Math.floor(Math.random() * (max - min + 1)) + min;
+const toChallengeKey = (date = new Date()): string =>
+  date.toLocaleDateString('en-CA', { timeZone: 'UTC' });
 
-const randomChoice = <T,>(items: readonly T[]): T => {
+const seedFromKey = (key: string): number => {
+  const digits = key.replace(/-/g, '');
+  return Number.parseInt(digits, 10);
+};
+
+const mulberry32 = (seed: number): (() => number) => {
+  let t = seed;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), t | 1);
+    r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const randomChoice = <T,>(items: readonly T[], next: () => number): T => {
   const fallback = items[0];
   if (fallback === undefined) {
     throw new Error('randomChoice requires a non-empty array');
   }
-  return items[Math.floor(Math.random() * items.length)] ?? fallback;
+  return items[Math.floor(next() * items.length)] ?? fallback;
 };
 
-const makeDataset = (): Incident[] => {
+const makeDataset = (seed: number): Incident[] => {
+  const rand = mulberry32(seed);
   const rows: Incident[] = [];
   for (let i = 0; i < 120; i += 1) {
-    const severity = randomChoice(severities);
-    const service = randomChoice(services);
-    const durationMin = randomInt(5, 90) + (severity === 'critical' ? 20 : 0);
-    const errorRate = Number((Math.random() * 0.2).toFixed(3));
-    const affectedUsers = randomInt(50, 2500) + (severity === 'critical' ? 1200 : 0);
+    const severity = randomChoice(severities, rand);
+    const service = randomChoice(services, rand);
+    const durationMin = Math.floor(rand() * 86) + 5 + (severity === 'critical' ? 20 : 0);
+    const errorRate = Number((rand() * 0.2).toFixed(3));
+    const affectedUsers = Math.floor(rand() * 2451) + 50 + (severity === 'critical' ? 1200 : 0);
     rows.push({
       id: `INC-${1000 + i}`,
       service,
@@ -101,17 +119,6 @@ const deriveExpected = (dataset: Incident[]): Set<string> => {
   );
   return new Set(expected.map((row) => row.id));
 };
-
-const defaultSql = `-- Incident Triage (T-SQL-ish)
--- Table: incidents(id, service, severity, duration_min, error_rate, affected_users)
-SELECT id, service, severity, duration_min, error_rate, affected_users
-FROM incidents
-WHERE severity IN ('critical', 'high')
-  AND service IN ('payments', 'auth')
-  AND error_rate >= 0.08
-  AND duration_min >= 30
-ORDER BY error_rate DESC
-LIMIT 12;`;
 
 const parseSql = (sql: string): ParsedQuery => {
   const lower = sql.toLowerCase();
@@ -201,39 +208,18 @@ const parseSql = (sql: string): ParsedQuery => {
     predicates,
     orderBy,
     limit,
-    complexity: predicates.length + (orderBy ? 1 : 0) + (limit ? 1 : 0),
+    complexity: clamp(predicates.length + (orderBy ? 1 : 0) + (limit ? 1 : 0), 1, 10),
   };
 };
 
-const scoreQuery = (expectedIds: Set<string>, results: Incident[], complexity: number): ScoreResult => {
-  const resultIds = new Set(results.map((row) => row.id));
-  let truePositives = 0;
-  let falsePositives = 0;
-  let falseNegatives = 0;
-
-  for (const id of resultIds) {
-    if (expectedIds.has(id)) {
-      truePositives += 1;
-    } else {
-      falsePositives += 1;
-    }
-  }
-  for (const id of expectedIds) {
-    if (!resultIds.has(id)) {
-      falseNegatives += 1;
-    }
-  }
-
-  const precision = truePositives / Math.max(1, truePositives + falsePositives);
-  const recall = truePositives / Math.max(1, truePositives + falseNegatives);
-  const efficiency = clamp(1 - (complexity - 1) * 0.06, 0.4, 1);
-  const score = clamp(precision * 0.6 + recall * 0.3 + efficiency * 0.1, 0, 1);
-
-  return { score, precision, recall, efficiency };
-};
+const attemptStorageKey = (challengeKey: string): string => `data-duels-attempt-${challengeKey}`;
 
 export const useAppStore = create<AppState>((set, get) => {
-  const dataset = makeDataset();
+  const challengeKey = toChallengeKey();
+  const seed = seedFromKey(challengeKey);
+  const dataset = makeDataset(seed);
+  const expectedIds = deriveExpected(dataset);
+  const attemptUsed = localStorage.getItem(attemptStorageKey(challengeKey)) === 'used';
   return {
     title: 'Data Duels',
     hasStarted: false,
@@ -242,16 +228,11 @@ export const useAppStore = create<AppState>((set, get) => {
     isRunning: false,
     error: null,
     dataset,
-    expectedIds: deriveExpected(dataset),
+    expectedIds,
     results: [],
-    score: null,
-    round: 1,
-    history: [],
-    leaderboard: [
-      { name: 'Atlas', score: 0.86, round: 1 },
-      { name: 'Nova', score: 0.81, round: 1 },
-      { name: 'Quill', score: 0.77, round: 1 },
-    ],
+    resultStatus: attemptUsed ? 'incorrect' : 'pending',
+    attemptUsed,
+    challengeKey,
     start: () => set({ hasStarted: true }),
     updateSql: (sql) => set({ sql }),
     runSql: async () => {
@@ -310,47 +291,23 @@ export const useAppStore = create<AppState>((set, get) => {
         set({ isRunning: false });
       }
     },
-    scoreRun: () => {
-      const { results, expectedIds, round, history, leaderboard, sql } = get();
+    submitAnswer: () => {
+      const { attemptUsed, results, expectedIds, challengeKey, sql } = get();
+      if (attemptUsed) {
+        return;
+      }
       const parsed = parseSql(sql);
-      const summary = scoreQuery(expectedIds, results, parsed.complexity);
-      const nextHistory = [...history, { round, ...summary }];
-      const nextLeaderboard = [
-        { name: 'You', score: summary.score, round },
-        ...leaderboard,
-      ]
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
-      set({ score: summary, history: nextHistory, leaderboard: nextLeaderboard });
-    },
-    nextRound: () => {
-      const dataset = makeDataset();
+      const resultIds = new Set(results.map((row) => row.id));
+      const isExact = resultIds.size === expectedIds.size &&
+        [...expectedIds].every((id) => resultIds.has(id));
+      const resultStatus: ResultStatus = isExact ? 'correct' : 'incorrect';
+      localStorage.setItem(attemptStorageKey(challengeKey), 'used');
       set({
-        round: get().round + 1,
-        dataset,
-        expectedIds: deriveExpected(dataset),
-        results: [],
-        score: null,
+        resultStatus,
+        attemptUsed: true,
+        error: null,
       });
-    },
-    resetMatch: () => {
-      const dataset = makeDataset();
-      set({
-        hasStarted: false,
-        sql: defaultSql,
-        lastQuery: null,
-        dataset,
-        expectedIds: deriveExpected(dataset),
-        results: [],
-        score: null,
-        round: 1,
-        history: [],
-        leaderboard: [
-          { name: 'Atlas', score: 0.86, round: 1 },
-          { name: 'Nova', score: 0.81, round: 1 },
-          { name: 'Quill', score: 0.77, round: 1 },
-        ],
-      });
+      void parsed;
     },
   };
 });
