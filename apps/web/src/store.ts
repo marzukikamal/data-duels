@@ -28,6 +28,7 @@ type AppState = {
   updateSql: (sql: string) => void;
   runSql: () => Promise<void>;
   submitAnswer: () => void;
+  setChallengeKey: (key: string) => void;
 };
 
 const services = ['payments', 'auth', 'search', 'analytics', 'checkout', 'profile'] as const;
@@ -220,13 +221,19 @@ const parseSql = (sql: string): ParsedQuery => {
 const attemptStorageKey = (challengeKey: string): string => `data-duels-attempts-${challengeKey}`;
 const resultStorageKey = (challengeKey: string): string => `data-duels-result-${challengeKey}`;
 
-export const useAppStore = create<AppState>((set, get) => {
-  const challengeKey = toChallengeKey();
+const loadChallenge = (challengeKey: string) => {
   const seed = seedFromKey(challengeKey);
   const dataset = makeDataset(seed);
   const expectedAnswer = deriveExpectedAnswer(dataset);
   const storedAttempts = Number(localStorage.getItem(attemptStorageKey(challengeKey)) ?? '0');
-  const storedResult = (localStorage.getItem(resultStorageKey(challengeKey)) ?? 'pending') as ResultStatus;
+  const storedResult = (localStorage.getItem(resultStorageKey(challengeKey)) ??
+    'pending') as ResultStatus;
+  return { dataset, expectedAnswer, storedAttempts, storedResult };
+};
+
+export const useAppStore = create<AppState>((set, get) => {
+  const challengeKey = toChallengeKey();
+  const { dataset, expectedAnswer, storedAttempts, storedResult } = loadChallenge(challengeKey);
   return {
     title: 'Data Duels',
     sql: defaultSql,
@@ -276,7 +283,11 @@ export const useAppStore = create<AppState>((set, get) => {
         const answer = Number(row.answer ?? row.count ?? row['count(*)'] ?? row['COUNT(*)'] ?? NaN);
         await conn.close();
         if (Number.isNaN(answer)) {
-          set({ lastQuery: sql, lastAnswer: null, error: 'Query must return a single numeric column named answer.' });
+          set({
+            lastQuery: sql,
+            lastAnswer: null,
+            error: 'Query must return a single numeric column named answer.',
+          });
           return;
         }
         set({ lastQuery: sql, lastAnswer: answer });
@@ -302,6 +313,20 @@ export const useAppStore = create<AppState>((set, get) => {
         error: null,
       });
       void parseSql;
+    },
+    setChallengeKey: (key: string) => {
+      const { dataset, expectedAnswer, storedAttempts, storedResult } = loadChallenge(key);
+      set({
+        challengeKey: key,
+        dataset,
+        expectedAnswer,
+        attemptsUsed: storedAttempts,
+        resultStatus: storedResult,
+        lastAnswer: null,
+        lastQuery: null,
+        error: null,
+        sql: defaultSql,
+      });
     },
   };
 });
