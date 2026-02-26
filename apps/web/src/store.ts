@@ -19,8 +19,8 @@ type AppState = {
   isRunning: boolean;
   error: string | null;
   dataset: Incident[];
-  expectedIds: Set<string>;
-  results: Incident[];
+  expectedAnswer: number;
+  lastAnswer: number | null;
   resultStatus: ResultStatus;
   attemptsUsed: number;
   challengeKey: string;
@@ -49,22 +49,20 @@ type ParsedQuery = {
 };
 
 const solutionSql = `-- Daily Challenge Solution
-SELECT id, service, severity, duration_min, error_rate, affected_users
+SELECT COUNT(*) AS answer
 FROM incidents
 WHERE severity IN ('critical', 'high')
   AND service IN ('payments', 'auth')
   AND error_rate >= 0.08
-  AND duration_min >= 30
-ORDER BY error_rate DESC;`;
+  AND duration_min >= 30;`;
 
 const defaultSql = `-- Daily Challenge
-SELECT id, service, severity, duration_min, error_rate, affected_users
+SELECT COUNT(*) AS answer
 FROM incidents
 WHERE severity IN ('critical', 'high')
   AND service IN ('payments', 'auth')
   AND error_rate >= 0.08
-  AND duration_min >= 30
-ORDER BY error_rate DESC;`;
+  AND duration_min >= 30;`;
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
@@ -116,7 +114,7 @@ const makeDataset = (seed: number): Incident[] => {
   return rows;
 };
 
-const deriveExpected = (dataset: Incident[]): Set<string> => {
+const deriveExpectedAnswer = (dataset: Incident[]): number => {
   const expected = dataset.filter(
     (row) =>
       (row.severity === 'critical' || row.severity === 'high') &&
@@ -124,7 +122,7 @@ const deriveExpected = (dataset: Incident[]): Set<string> => {
       row.errorRate >= 0.08 &&
       row.durationMin >= 30,
   );
-  return new Set(expected.map((row) => row.id));
+  return expected.length;
 };
 
 const parseSql = (sql: string): ParsedQuery => {
@@ -220,13 +218,15 @@ const parseSql = (sql: string): ParsedQuery => {
 };
 
 const attemptStorageKey = (challengeKey: string): string => `data-duels-attempts-${challengeKey}`;
+const resultStorageKey = (challengeKey: string): string => `data-duels-result-${challengeKey}`;
 
 export const useAppStore = create<AppState>((set, get) => {
   const challengeKey = toChallengeKey();
   const seed = seedFromKey(challengeKey);
   const dataset = makeDataset(seed);
-  const expectedIds = deriveExpected(dataset);
+  const expectedAnswer = deriveExpectedAnswer(dataset);
   const storedAttempts = Number(localStorage.getItem(attemptStorageKey(challengeKey)) ?? '0');
+  const storedResult = (localStorage.getItem(resultStorageKey(challengeKey)) ?? 'pending') as ResultStatus;
   return {
     title: 'Data Duels',
     sql: defaultSql,
@@ -234,9 +234,9 @@ export const useAppStore = create<AppState>((set, get) => {
     isRunning: false,
     error: null,
     dataset,
-    expectedIds,
-    results: [],
-    resultStatus: 'pending',
+    expectedAnswer,
+    lastAnswer: null,
+    resultStatus: storedResult,
     attemptsUsed: storedAttempts,
     challengeKey,
     solutionSql,
@@ -272,25 +272,14 @@ export const useAppStore = create<AppState>((set, get) => {
 
         const result = await conn.query(sql);
         const rows = result.toArray() as Array<Record<string, unknown>>;
-        const results: Incident[] = rows
-          .map((row) => {
-            const id = row.id;
-            if (typeof id !== 'string') {
-              return null;
-            }
-            const severity = String(row.severity ?? 'low');
-            return {
-              id,
-              service: String(row.service ?? 'unknown'),
-              severity: (severity as Incident['severity']) ?? 'low',
-              durationMin: Number(row.duration_min ?? row.durationMin ?? 0),
-              errorRate: Number(row.error_rate ?? row.errorRate ?? 0),
-              affectedUsers: Number(row.affected_users ?? row.affectedUsers ?? 0),
-            };
-          })
-          .filter((row): row is Incident => row !== null);
+        const row = rows[0] ?? {};
+        const answer = Number(row.answer ?? row.count ?? row['count(*)'] ?? row['COUNT(*)'] ?? NaN);
         await conn.close();
-        set({ lastQuery: sql, results });
+        if (Number.isNaN(answer)) {
+          set({ lastQuery: sql, lastAnswer: null, error: 'Query must return a single numeric column named answer.' });
+          return;
+        }
+        set({ lastQuery: sql, lastAnswer: answer });
       } catch (error) {
         set({ error: error instanceof Error ? error.message : 'SQL execution failed' });
       } finally {
@@ -298,23 +287,21 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     },
     submitAnswer: () => {
-      const { attemptsUsed, results, expectedIds, challengeKey, sql } = get();
+      const { attemptsUsed, expectedAnswer, lastAnswer, challengeKey } = get();
       if (attemptsUsed >= 5) {
         return;
       }
-      const parsed = parseSql(sql);
-      const resultIds = new Set(results.map((row) => row.id));
-      const isExact =
-        resultIds.size === expectedIds.size &&
-        [...expectedIds].every((id) => resultIds.has(id));
       const nextAttempts = attemptsUsed + 1;
+      const isExact = lastAnswer !== null && lastAnswer === expectedAnswer;
+      const resultStatus: ResultStatus = isExact ? 'correct' : 'incorrect';
       localStorage.setItem(attemptStorageKey(challengeKey), String(nextAttempts));
+      localStorage.setItem(resultStorageKey(challengeKey), resultStatus);
       set({
-        resultStatus: isExact ? 'correct' : 'incorrect',
+        resultStatus,
         attemptsUsed: nextAttempts,
         error: null,
       });
-      void parsed;
+      void parseSql;
     },
   };
 });
