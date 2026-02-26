@@ -1,220 +1,305 @@
 ﻿import { create } from 'zustand';
-import type { TimeSeriesPoint } from '@engine/index';
-import { calculateScore, generateTimeSeries, injectAnomaly } from '@engine/index';
+
+type Incident = {
+  id: string;
+  service: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  durationMin: number;
+  errorRate: number;
+  affectedUsers: number;
+};
+
+type ScoreResult = {
+  score: number;
+  precision: number;
+  recall: number;
+  efficiency: number;
+};
 
 type AppState = {
   title: string;
-  series: TimeSeriesPoint[];
-  anomalies: number[];
-  predictions: number[];
-  score: number | null;
-  precision: number | null;
-  recall: number | null;
-  latency: number | null;
   hasStarted: boolean;
   sql: string;
   lastQuery: string | null;
-  lastRows: TimeSeriesPoint[];
+  dataset: Incident[];
+  expectedIds: Set<string>;
+  results: Incident[];
+  score: ScoreResult | null;
   round: number;
-  history: Array<{
-    round: number;
-    score: number;
-    precision: number;
-    recall: number;
-    latency: number;
-  }>;
-  leaderboard: Array<{
-    name: string;
-    score: number;
-    round: number;
-  }>;
+  history: Array<ScoreResult & { round: number }>;
+  leaderboard: Array<{ name: string; score: number; round: number }>;
   start: () => void;
-  generate: () => void;
-  addAnomaly: () => void;
   updateSql: (sql: string) => void;
   runSql: () => void;
-  evaluate: () => void;
+  scoreRun: () => void;
   nextRound: () => void;
   resetMatch: () => void;
 };
 
-const makeSeries = (): TimeSeriesPoint[] =>
-  generateTimeSeries({ length: 120, baseline: 100, noise: 2, drift: 0.05 });
+const services = ['payments', 'auth', 'search', 'analytics', 'checkout', 'profile'] as const;
+const severities = ['low', 'medium', 'high', 'critical'] as const;
 
-const defaultSql = `-- Data Duels SQL (T-SQL-ish)
--- Table: series(index INT, value FLOAT)
-SELECT index, value
-FROM series
-WHERE value > 118
-ORDER BY index;`;
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
 
-const parseSql = (sql: string, series: TimeSeriesPoint[]): TimeSeriesPoint[] => {
-  const lower = sql.toLowerCase();
-  const whereIndex = lower.indexOf('where');
-  if (whereIndex === -1) {
-    return series;
+const randomInt = (min: number, max: number): number =>
+  Math.floor(Math.random() * (max - min + 1)) + min;
+
+const randomChoice = <T,>(items: readonly T[]): T =>
+  items[Math.floor(Math.random() * items.length)] ?? items[0];
+
+const makeDataset = (): Incident[] => {
+  const rows: Incident[] = [];
+  for (let i = 0; i < 120; i += 1) {
+    const severity = randomChoice(severities);
+    const service = randomChoice(services);
+    const durationMin = randomInt(5, 90) + (severity === 'critical' ? 20 : 0);
+    const errorRate = Number((Math.random() * 0.2).toFixed(3));
+    const affectedUsers = randomInt(50, 2500) + (severity === 'critical' ? 1200 : 0);
+    rows.push({
+      id: `INC-${1000 + i}`,
+      service,
+      severity,
+      durationMin,
+      errorRate,
+      affectedUsers,
+    });
   }
-
-  const whereClause = lower.slice(whereIndex + 5);
-  const conditions = whereClause
-    .split(/and|or/)
-    .map((c) => c.trim())
-    .filter(Boolean);
-
-  const predicates = conditions.map((condition) => {
-    const match = condition.match(/value\s*(>=|<=|=|>|<)\s*([0-9.]+)/);
-    if (!match) {
-      return () => true;
-    }
-    const operator = match[1];
-    const threshold = Number(match[2]);
-    return (value: number): boolean => {
-      switch (operator) {
-        case '>':
-          return value > threshold;
-        case '>=':
-          return value >= threshold;
-        case '<':
-          return value < threshold;
-        case '<=':
-          return value <= threshold;
-        case '=':
-          return value === threshold;
-        default:
-          return true;
-      }
-    };
-  });
-
-  return series.filter((point) => predicates.every((predicate) => predicate(point.value)));
+  return rows;
 };
 
-export const useAppStore = create<AppState>((set, get) => ({
-  title: 'Data Duels',
-  series: makeSeries(),
-  anomalies: [],
-  predictions: [],
-  score: null,
-  precision: null,
-  recall: null,
-  latency: null,
-  hasStarted: false,
-  sql: defaultSql,
-  lastQuery: null,
-  lastRows: [],
-  round: 1,
-  history: [],
-  leaderboard: [
-    { name: 'Atlas', score: 0.82, round: 1 },
-    { name: 'Nova', score: 0.76, round: 1 },
-    { name: 'Quill', score: 0.64, round: 1 },
-  ],
-  start: () => {
-    set({ hasStarted: true });
-  },
-  generate: () => {
-    const series = makeSeries();
-    set({
-      series,
-      anomalies: [],
-      predictions: [],
-      score: null,
-      precision: null,
-      recall: null,
-      latency: null,
-    });
-  },
-  addAnomaly: () => {
-    const { series, anomalies } = get();
-    const index = Math.floor(Math.random() * series.length);
-    const mutated = injectAnomaly(series, { index, magnitude: 18, spread: 2 });
-    const nextAnomalies = [...anomalies, index];
-    set({
-      series: mutated,
-      anomalies: nextAnomalies,
-      score: null,
-      precision: null,
-      recall: null,
-      latency: null,
-    });
-  },
-  updateSql: (sql: string) => {
-    set({ sql });
-  },
-  runSql: () => {
-    const { sql, series } = get();
-    const rows = parseSql(sql, series);
-    const predictions = series.map((point) =>
-      rows.find((row) => row.index === point.index) ? 1 : 0,
-    );
-    set({ lastQuery: sql, lastRows: rows, predictions });
-  },
-  evaluate: () => {
-    const { anomalies, series, round, history, leaderboard, predictions } = get();
-    const actual = series.map((point) => (anomalies.includes(point.index) ? 1 : 0));
-    const predicted = predictions.length === series.length ? predictions : series.map(() => 0);
-    const result = calculateScore(actual, predicted);
-    const nextHistory = [
-      ...history,
-      {
-        round,
-        score: result.score,
-        precision: result.precision,
-        recall: result.recall,
-        latency: result.latency,
-      },
-    ];
-    const nextLeaderboard = [
-      { name: 'You', score: result.score, round },
-      ...leaderboard,
-    ]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-    set({
-      predictions: predicted,
-      score: result.score,
-      precision: result.precision,
-      recall: result.recall,
-      latency: result.latency,
-      history: nextHistory,
-      leaderboard: nextLeaderboard,
-    });
-  },
-  nextRound: () => {
-    const { round } = get();
-    const series = makeSeries();
-    set({
-      round: round + 1,
-      series,
-      anomalies: [],
-      predictions: [],
-      score: null,
-      precision: null,
-      recall: null,
-      latency: null,
-      lastRows: [],
-    });
-  },
-  resetMatch: () => {
-    set({
-      round: 1,
-      hasStarted: false,
-      series: makeSeries(),
-      anomalies: [],
-      predictions: [],
-      score: null,
-      precision: null,
-      recall: null,
-      latency: null,
-      sql: defaultSql,
-      lastQuery: null,
-      lastRows: [],
-      history: [],
-      leaderboard: [
-        { name: 'Atlas', score: 0.82, round: 1 },
-        { name: 'Nova', score: 0.76, round: 1 },
-        { name: 'Quill', score: 0.64, round: 1 },
-      ],
-    });
-  },
-}));
+const deriveExpected = (dataset: Incident[]): Set<string> => {
+  const expected = dataset.filter(
+    (row) =>
+      (row.severity === 'critical' || row.severity === 'high') &&
+      (row.service === 'payments' || row.service === 'auth') &&
+      row.errorRate >= 0.08 &&
+      row.durationMin >= 30,
+  );
+  return new Set(expected.map((row) => row.id));
+};
+
+const defaultSql = `-- Incident Triage (T-SQL-ish)
+-- Table: incidents(id, service, severity, duration_min, error_rate, affected_users)
+SELECT id, service, severity, duration_min, error_rate, affected_users
+FROM incidents
+WHERE severity IN ('critical', 'high')
+  AND service IN ('payments', 'auth')
+  AND error_rate >= 0.08
+  AND duration_min >= 30
+ORDER BY error_rate DESC
+LIMIT 12;`;
+
+type ParsedQuery = {
+  predicates: Array<(row: Incident) => boolean>;
+  orderBy: { field: keyof Incident; direction: 'asc' | 'desc' } | null;
+  limit: number | null;
+  complexity: number;
+};
+
+const parseSql = (sql: string): ParsedQuery => {
+  const lower = sql.toLowerCase();
+  const whereMatch = lower.split('where')[1] ?? '';
+  const orderMatch = lower.split('order by')[1] ?? '';
+  const limitMatch = lower.match(/limit\s+(\d+)/);
+  const limit = limitMatch ? Number(limitMatch[1]) : null;
+
+  const orderBy = (() => {
+    if (!orderMatch) {
+      return null;
+    }
+    const cleaned = orderMatch.split(/limit|;|\n/)[0]?.trim() ?? '';
+    const [fieldRaw, directionRaw] = cleaned.split(/\s+/);
+    if (!fieldRaw) {
+      return null;
+    }
+    const fieldMap: Record<string, keyof Incident> = {
+      id: 'id',
+      service: 'service',
+      severity: 'severity',
+      duration_min: 'durationMin',
+      error_rate: 'errorRate',
+      affected_users: 'affectedUsers',
+    };
+    const field = fieldMap[fieldRaw] ?? 'errorRate';
+    const direction = directionRaw === 'asc' ? 'asc' : 'desc';
+    return { field, direction };
+  })();
+
+  const predicates: Array<(row: Incident) => boolean> = [];
+  const clause = whereMatch.split(/order by|limit|;/)[0]?.trim() ?? '';
+  const parts = clause
+    .split(/and/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  for (const part of parts) {
+    const inMatch = part.match(/(severity|service)\s+in\s*\(([^)]+)\)/i);
+    if (inMatch) {
+      const field = inMatch[1].toLowerCase();
+      const values = inMatch[2]
+        .split(',')
+        .map((v) => v.replace(/['\s]/g, '').toLowerCase())
+        .filter(Boolean);
+      predicates.push((row) =>
+        values.includes(String(row[field as 'severity' | 'service']).toLowerCase()),
+      );
+      continue;
+    }
+
+    const compMatch = part.match(/(error_rate|duration_min|affected_users)\s*(>=|<=|=|>|<)\s*([0-9.]+)/i);
+    if (compMatch) {
+      const fieldRaw = compMatch[1].toLowerCase();
+      const operator = compMatch[2];
+      const value = Number(compMatch[3]);
+      const fieldMap: Record<string, keyof Incident> = {
+        error_rate: 'errorRate',
+        duration_min: 'durationMin',
+        affected_users: 'affectedUsers',
+      };
+      const field = fieldMap[fieldRaw] ?? 'errorRate';
+      predicates.push((row) => {
+        const target = row[field];
+        switch (operator) {
+          case '>':
+            return target > value;
+          case '>=':
+            return target >= value;
+          case '<':
+            return target < value;
+          case '<=':
+            return target <= value;
+          case '=':
+            return target === value;
+          default:
+            return true;
+        }
+      });
+      continue;
+    }
+  }
+
+  return {
+    predicates,
+    orderBy,
+    limit,
+    complexity: predicates.length + (orderBy ? 1 : 0) + (limit ? 1 : 0),
+  };
+};
+
+const runQuery = (dataset: Incident[], parsed: ParsedQuery): Incident[] => {
+  const filtered = dataset.filter((row) => parsed.predicates.every((predicate) => predicate(row)));
+  const ordered = parsed.orderBy
+    ? [...filtered].sort((a, b) => {
+        const field = parsed.orderBy?.field ?? 'errorRate';
+        const direction = parsed.orderBy?.direction ?? 'desc';
+        const aValue = a[field];
+        const bValue = b[field];
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return direction === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        const diff = Number(aValue) - Number(bValue);
+        return direction === 'asc' ? diff : -diff;
+      })
+    : filtered;
+
+  return parsed.limit ? ordered.slice(0, parsed.limit) : ordered;
+};
+
+const scoreQuery = (expectedIds: Set<string>, results: Incident[], complexity: number): ScoreResult => {
+  const resultIds = new Set(results.map((row) => row.id));
+  let truePositives = 0;
+  let falsePositives = 0;
+  let falseNegatives = 0;
+
+  for (const id of resultIds) {
+    if (expectedIds.has(id)) {
+      truePositives += 1;
+    } else {
+      falsePositives += 1;
+    }
+  }
+  for (const id of expectedIds) {
+    if (!resultIds.has(id)) {
+      falseNegatives += 1;
+    }
+  }
+
+  const precision = truePositives / Math.max(1, truePositives + falsePositives);
+  const recall = truePositives / Math.max(1, truePositives + falseNegatives);
+  const efficiency = clamp(1 - (complexity - 1) * 0.06, 0.4, 1);
+  const score = clamp(precision * 0.6 + recall * 0.3 + efficiency * 0.1, 0, 1);
+
+  return { score, precision, recall, efficiency };
+};
+
+export const useAppStore = create<AppState>((set, get) => {
+  const dataset = makeDataset();
+  return {
+    title: 'Data Duels',
+    hasStarted: false,
+    sql: defaultSql,
+    lastQuery: null,
+    dataset,
+    expectedIds: deriveExpected(dataset),
+    results: [],
+    score: null,
+    round: 1,
+    history: [],
+    leaderboard: [
+      { name: 'Atlas', score: 0.86, round: 1 },
+      { name: 'Nova', score: 0.81, round: 1 },
+      { name: 'Quill', score: 0.77, round: 1 },
+    ],
+    start: () => set({ hasStarted: true }),
+    updateSql: (sql) => set({ sql }),
+    runSql: () => {
+      const { sql, dataset } = get();
+      const parsed = parseSql(sql);
+      const results = runQuery(dataset, parsed);
+      set({ lastQuery: sql, results });
+    },
+    scoreRun: () => {
+      const { results, expectedIds, round, history, leaderboard, sql } = get();
+      const parsed = parseSql(sql);
+      const summary = scoreQuery(expectedIds, results, parsed.complexity);
+      const nextHistory = [...history, { round, ...summary }];
+      const nextLeaderboard = [
+        { name: 'You', score: summary.score, round },
+        ...leaderboard,
+      ]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+      set({ score: summary, history: nextHistory, leaderboard: nextLeaderboard });
+    },
+    nextRound: () => {
+      const dataset = makeDataset();
+      set({
+        round: get().round + 1,
+        dataset,
+        expectedIds: deriveExpected(dataset),
+        results: [],
+        score: null,
+      });
+    },
+    resetMatch: () => {
+      const dataset = makeDataset();
+      set({
+        hasStarted: false,
+        sql: defaultSql,
+        lastQuery: null,
+        dataset,
+        expectedIds: deriveExpected(dataset),
+        results: [],
+        score: null,
+        round: 1,
+        history: [],
+        leaderboard: [
+          { name: 'Atlas', score: 0.86, round: 1 },
+          { name: 'Nova', score: 0.81, round: 1 },
+          { name: 'Quill', score: 0.77, round: 1 },
+        ],
+      });
+    },
+  };
+});

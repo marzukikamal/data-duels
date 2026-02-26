@@ -1,46 +1,24 @@
-﻿import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { useAppStore } from './store';
+﻿import { useAppStore } from './store';
 
 const App = () => {
   const {
     title,
-    series,
-    anomalies,
-    score,
-    precision,
-    recall,
-    latency,
     hasStarted,
     sql,
     lastQuery,
-    lastRows,
+    dataset,
+    results,
+    score,
     round,
     history,
     leaderboard,
     start,
-    generate,
-    addAnomaly,
     updateSql,
     runSql,
-    evaluate,
+    scoreRun,
     nextRound,
     resetMatch,
   } = useAppStore();
-
-  const chartData = series.map((point) => ({
-    index: point.index,
-    value: Number(point.value.toFixed(2)),
-    anomaly: anomalies.includes(point.index) ? point.value : null,
-    predicted: lastRows.find((row) => row.index === point.index) ? point.value : null,
-  }));
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -49,12 +27,11 @@ const App = () => {
           <div className="max-w-2xl text-center">
             <p className="text-xs uppercase tracking-[0.4em] text-zinc-500">Data Duels</p>
             <h1 className="mt-4 text-4xl font-semibold tracking-tight text-zinc-100">
-              Detect anomalies. Win rounds. Climb the board.
+              Incident Triage Arena
             </h1>
             <p className="mt-4 text-sm text-zinc-400">
-              Write SQL-style detection rules, run them on live signals, and score on precision,
-              recall, and latency. Each round reshuffles the series. Your best score tops the
-              leaderboard.
+              You are the on-call data analyst. Use SQL to identify the most urgent incidents
+              across services. Your query is scored on accuracy and efficiency.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <button
@@ -62,44 +39,21 @@ const App = () => {
                 onClick={start}
                 type="button"
               >
-                Start Match
-              </button>
-              <button
-                className="rounded-full border border-zinc-700 px-6 py-3 text-xs uppercase tracking-widest text-zinc-200 transition hover:border-zinc-500"
-                onClick={() => {
-                  start();
-                  generate();
-                }}
-                type="button"
-              >
-                Randomize First Round
+                Start Mission
               </button>
             </div>
           </div>
         </div>
       )}
+
       <header className="border-b border-zinc-800/70">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-zinc-500">Prototype</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-zinc-500">Ops Arena</p>
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-            <p className="mt-1 text-xs text-zinc-500">Round {round}</p>
+            <p className="mt-1 text-xs text-zinc-500">Incident Triage - Round {round}</p>
           </div>
           <div className="flex gap-3">
-            <button
-              className="rounded-full border border-zinc-700 px-4 py-2 text-xs uppercase tracking-widest text-zinc-200 transition hover:border-zinc-500"
-              onClick={generate}
-              type="button"
-            >
-              New Match
-            </button>
-            <button
-              className="rounded-full bg-zinc-100 px-4 py-2 text-xs uppercase tracking-widest text-zinc-950 transition hover:bg-white"
-              onClick={addAnomaly}
-              type="button"
-            >
-              Inject Anomaly
-            </button>
             <button
               className="rounded-full border border-indigo-500/60 px-4 py-2 text-xs uppercase tracking-widest text-indigo-300 transition hover:border-indigo-400"
               onClick={runSql}
@@ -109,7 +63,7 @@ const App = () => {
             </button>
             <button
               className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs uppercase tracking-widest text-emerald-300 transition hover:border-emerald-400"
-              onClick={evaluate}
+              onClick={scoreRun}
               type="button"
             >
               Score Run
@@ -133,124 +87,121 @@ const App = () => {
       </header>
 
       <main className="mx-auto grid max-w-6xl gap-6 px-6 py-10 lg:grid-cols-[2fr,1fr]">
-        <section className="rounded-3xl border border-zinc-800/70 bg-gradient-to-br from-zinc-950 via-zinc-950 to-zinc-900/40 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Signal Arena</h2>
-              <p className="text-sm text-zinc-400">
-                Baseline series with injected anomalies and SQL predictions.
-              </p>
+        <section className="space-y-6">
+          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
+            <h2 className="text-lg font-semibold">Mission Brief</h2>
+            <p className="mt-2 text-sm text-zinc-400">
+              Identify high-impact incidents affecting critical services. Return the incident rows
+              that should be escalated to the on-call lead. Score balances accuracy with query
+              efficiency.
+            </p>
+            <div className="mt-4 grid gap-3 text-sm text-zinc-300">
+              <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
+                Priority services: payments, auth
+              </div>
+              <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
+                Signals: error_rate, duration_min, affected_users
+              </div>
+              <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
+                Goal: find critical and high severity incidents with elevated error rate
+              </div>
             </div>
-            <div className="text-right text-xs text-zinc-500">Points: {series.length}</div>
           </div>
-          <div className="mt-6 h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="4 4" stroke="#27272a" />
-                <XAxis dataKey="index" stroke="#71717a" tick={{ fontSize: 10 }} />
-                <YAxis stroke="#71717a" tick={{ fontSize: 10 }} />
-                <Tooltip
-                  contentStyle={{
-                    background: '#09090b',
-                    border: '1px solid #27272a',
-                    borderRadius: 12,
-                  }}
-                  labelStyle={{ color: '#e4e4e7' }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#38bdf8"
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="anomaly"
-                  stroke="#f97316"
-                  strokeWidth={2}
-                  dot={{ r: 3 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="predicted"
-                  stroke="#a855f7"
-                  strokeWidth={2}
-                  dot={{ r: 2 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+
+          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold">SQL Editor (T-SQL)</h3>
+              <span className="text-xs uppercase tracking-widest text-zinc-500">incidents</span>
+            </div>
+            <p className="mt-2 text-sm text-zinc-400">
+              Table columns: id, service, severity, duration_min, error_rate, affected_users
+            </p>
+            <div className="mt-4 rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
+              <textarea
+                className="h-48 w-full resize-none bg-transparent text-sm text-zinc-100 outline-none"
+                value={sql}
+                onChange={(event) => updateSql(event.target.value)}
+              />
+            </div>
+            <p className="mt-3 text-xs text-zinc-500">
+              Example: SELECT * FROM incidents WHERE severity IN ('critical','high') AND error_rate
+              &gt;= 0.08 ORDER BY error_rate DESC LIMIT 10;
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold">Query Results</h3>
+              <span className="text-xs uppercase tracking-widest text-zinc-500">
+                {results.length} rows
+              </span>
+            </div>
+            <div className="mt-4 overflow-auto rounded-2xl border border-zinc-800/70">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-zinc-950/60 text-xs uppercase tracking-widest text-zinc-500">
+                  <tr>
+                    <th className="px-4 py-3">id</th>
+                    <th className="px-4 py-3">service</th>
+                    <th className="px-4 py-3">severity</th>
+                    <th className="px-4 py-3">duration</th>
+                    <th className="px-4 py-3">error_rate</th>
+                    <th className="px-4 py-3">affected</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/70">
+                  {results.length === 0 && (
+                    <tr>
+                      <td className="px-4 py-4 text-zinc-500" colSpan={6}>
+                        Run SQL to see results.
+                      </td>
+                    </tr>
+                  )}
+                  {results.map((row) => (
+                    <tr key={row.id} className="text-zinc-200">
+                      <td className="px-4 py-3 font-mono text-xs">{row.id}</td>
+                      <td className="px-4 py-3">{row.service}</td>
+                      <td className="px-4 py-3">{row.severity}</td>
+                      <td className="px-4 py-3">{row.durationMin}m</td>
+                      <td className="px-4 py-3">{row.errorRate.toFixed(3)}</td>
+                      <td className="px-4 py-3">{row.affectedUsers}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-xs text-zinc-500">
+              Last query: {lastQuery ? 'executed' : 'not run yet'}
+            </p>
           </div>
         </section>
 
         <section className="space-y-6">
           <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold">SQL Arena</h3>
-              <span className="text-xs uppercase tracking-widest text-zinc-500">T-SQL Style</span>
-            </div>
-            <p className="mt-2 text-sm text-zinc-400">
-              Write a detection query over the `series` table. Results become your predicted
-              anomalies.
-            </p>
-            <div className="mt-4 rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
-              <textarea
-                className="h-40 w-full resize-none bg-transparent text-sm text-zinc-100 outline-none"
-                value={sql}
-                onChange={(event) => updateSql(event.target.value)}
-              />
-            </div>
-            <div className="mt-4 flex flex-wrap gap-3 text-xs text-zinc-500">
-              <span>Example:</span>
-              <code className="rounded-full border border-zinc-800/70 bg-zinc-950/60 px-3 py-1 text-zinc-300">
-                SELECT * FROM series WHERE value &gt; 118
-              </code>
-              <code className="rounded-full border border-zinc-800/70 bg-zinc-950/60 px-3 py-1 text-zinc-300">
-                SELECT * FROM series WHERE value &gt; 116 AND value &lt; 130
-              </code>
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
-            <h3 className="text-base font-semibold">Round Snapshot</h3>
-            <p className="mt-2 text-sm text-zinc-400">
-              Your SQL result set is scored against the hidden anomaly labels.
-            </p>
-            <div className="mt-6 grid gap-4">
-              <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
-                <p className="text-xs uppercase tracking-widest text-zinc-500">Anomalies</p>
-                <p className="mt-2 text-2xl font-semibold text-zinc-100">{anomalies.length}</p>
-              </div>
+            <h3 className="text-base font-semibold">Scoreboard</h3>
+            <div className="mt-4 grid gap-3">
               <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
                 <p className="text-xs uppercase tracking-widest text-zinc-500">Score</p>
                 <p className="mt-2 text-2xl font-semibold text-emerald-300">
-                  {score === null ? '-' : score.toFixed(2)}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
-                <p className="text-xs uppercase tracking-widest text-zinc-500">Rows Returned</p>
-                <p className="mt-2 text-2xl font-semibold text-indigo-300">{lastRows.length}</p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  {lastQuery ? 'Last query executed' : 'Run a query to evaluate'}
+                  {score ? score.score.toFixed(2) : '-'}
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
                   <p className="text-[10px] uppercase tracking-widest text-zinc-500">Precision</p>
                   <p className="mt-2 text-sm text-zinc-100">
-                    {precision === null ? '-' : precision.toFixed(2)}
+                    {score ? score.precision.toFixed(2) : '-'}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
                   <p className="text-[10px] uppercase tracking-widest text-zinc-500">Recall</p>
                   <p className="mt-2 text-sm text-zinc-100">
-                    {recall === null ? '-' : recall.toFixed(2)}
+                    {score ? score.recall.toFixed(2) : '-'}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
-                  <p className="text-[10px] uppercase tracking-widest text-zinc-500">Latency</p>
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500">Efficiency</p>
                   <p className="mt-2 text-sm text-zinc-100">
-                    {latency === null ? '-' : latency.toFixed(2)}
+                    {score ? score.efficiency.toFixed(2) : '-'}
                   </p>
                 </div>
               </div>
@@ -287,7 +238,7 @@ const App = () => {
             <div className="mt-4 space-y-3">
               {history.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-zinc-800/70 bg-zinc-950/40 p-4 text-sm text-zinc-500">
-                  Play a round to capture metrics.
+                  Score a round to capture metrics.
                 </div>
               )}
               {history.map((entry) => (
@@ -302,20 +253,11 @@ const App = () => {
                   <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
                     <span>Precision {entry.precision.toFixed(2)}</span>
                     <span>Recall {entry.recall.toFixed(2)}</span>
-                    <span>Latency {entry.latency.toFixed(2)}</span>
+                    <span>Efficiency {entry.efficiency.toFixed(2)}</span>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
-            <h3 className="text-base font-semibold">Next Steps</h3>
-            <ul className="mt-3 text-sm text-zinc-400">
-              <li>Introduce JOINs and multi-table missions.</li>
-              <li>Score on query efficiency and latency budgets.</li>
-              <li>Add timed duels with head-to-head SQL challenges.</li>
-            </ul>
           </div>
         </section>
       </main>
