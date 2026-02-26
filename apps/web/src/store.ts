@@ -205,41 +205,6 @@ const parseSql = (sql: string): ParsedQuery => {
   };
 };
 
-const runQuery = (dataset: Incident[], parsed: ParsedQuery): Incident[] => {
-  const filtered = dataset.filter((row) => parsed.predicates.every((predicate) => predicate(row)));
-  const orderBy = parsed.orderBy;
-  const ordered = orderBy
-    ? [...filtered].sort((a, b) => {
-        const { field, direction } = orderBy;
-        const compareText = (left: string, right: string): number =>
-          direction === 'asc' ? left.localeCompare(right) : right.localeCompare(left);
-        const compareNumber = (left: number, right: number): number => {
-          const diff = left - right;
-          return direction === 'asc' ? diff : -diff;
-        };
-
-        switch (field) {
-          case 'id':
-            return compareText(a.id, b.id);
-          case 'service':
-            return compareText(a.service, b.service);
-          case 'severity':
-            return compareText(a.severity, b.severity);
-          case 'durationMin':
-            return compareNumber(a.durationMin, b.durationMin);
-          case 'errorRate':
-            return compareNumber(a.errorRate, b.errorRate);
-          case 'affectedUsers':
-            return compareNumber(a.affectedUsers, b.affectedUsers);
-          default:
-            return 0;
-        }
-      })
-    : filtered;
-
-  return parsed.limit ? ordered.slice(0, parsed.limit) : ordered;
-};
-
 const scoreQuery = (expectedIds: Set<string>, results: Incident[], complexity: number): ScoreResult => {
   const resultIds = new Set(results.map((row) => row.id));
   let truePositives = 0;
@@ -319,7 +284,7 @@ export const useAppStore = create<AppState>((set, get) => {
         await conn.query("INSERT INTO incidents SELECT * FROM read_json_auto('incidents.json')");
 
         const result = await conn.query(sql);
-        const rows = result.toArray().map((row) => row.toJSON()) as Record<string, unknown>[];
+        const rows = result.toArray() as Array<Record<string, unknown>>;
         const results: Incident[] = rows
           .map((row) => {
             const id = row.id;

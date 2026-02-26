@@ -58,7 +58,9 @@ const App = () => {
           <div className="flex gap-3">
             <button
               className="rounded-full border border-indigo-500/60 px-4 py-2 text-xs uppercase tracking-widest text-indigo-300 transition hover:border-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={runSql}
+              onClick={() => {
+                void runSql();
+              }}
               type="button"
               disabled={isRunning}
             >
