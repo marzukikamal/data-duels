@@ -1,4 +1,4 @@
-import {
+﻿import {
   CartesianGrid,
   Line,
   LineChart,
@@ -19,12 +19,17 @@ const App = () => {
     recall,
     latency,
     hasStarted,
+    sql,
+    lastQuery,
+    lastRows,
     round,
     history,
     leaderboard,
     start,
     generate,
     addAnomaly,
+    updateSql,
+    runSql,
     evaluate,
     nextRound,
     resetMatch,
@@ -34,6 +39,7 @@ const App = () => {
     index: point.index,
     value: Number(point.value.toFixed(2)),
     anomaly: anomalies.includes(point.index) ? point.value : null,
+    predicted: lastRows.find((row) => row.index === point.index) ? point.value : null,
   }));
 
   return (
@@ -46,8 +52,8 @@ const App = () => {
               Detect anomalies. Win rounds. Climb the board.
             </h1>
             <p className="mt-4 text-sm text-zinc-400">
-              Inject anomalies into synthetic signals, run a detector, and score on precision,
-              recall, and latency. Each round reshuffles the signal. Your best score tops the
+              Write SQL-style detection rules, run them on live signals, and score on precision,
+              recall, and latency. Each round reshuffles the series. Your best score tops the
               leaderboard.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -95,6 +101,13 @@ const App = () => {
               Inject Anomaly
             </button>
             <button
+              className="rounded-full border border-indigo-500/60 px-4 py-2 text-xs uppercase tracking-widest text-indigo-300 transition hover:border-indigo-400"
+              onClick={runSql}
+              type="button"
+            >
+              Run SQL
+            </button>
+            <button
               className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs uppercase tracking-widest text-emerald-300 transition hover:border-emerald-400"
               onClick={evaluate}
               type="button"
@@ -125,12 +138,10 @@ const App = () => {
             <div>
               <h2 className="text-lg font-semibold">Signal Arena</h2>
               <p className="text-sm text-zinc-400">
-                Baseline series with optional anomaly injections.
+                Baseline series with injected anomalies and SQL predictions.
               </p>
             </div>
-            <div className="text-right text-xs text-zinc-500">
-              Points: {series.length}
-            </div>
+            <div className="text-right text-xs text-zinc-500">Points: {series.length}</div>
           </div>
           <div className="mt-6 h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -160,6 +171,13 @@ const App = () => {
                   strokeWidth={2}
                   dot={{ r: 3 }}
                 />
+                <Line
+                  type="monotone"
+                  dataKey="predicted"
+                  stroke="#a855f7"
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -167,10 +185,36 @@ const App = () => {
 
         <section className="space-y-6">
           <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold">SQL Arena</h3>
+              <span className="text-xs uppercase tracking-widest text-zinc-500">T-SQL Style</span>
+            </div>
+            <p className="mt-2 text-sm text-zinc-400">
+              Write a detection query over the `series` table. Results become your predicted
+              anomalies.
+            </p>
+            <div className="mt-4 rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
+              <textarea
+                className="h-40 w-full resize-none bg-transparent text-sm text-zinc-100 outline-none"
+                value={sql}
+                onChange={(event) => updateSql(event.target.value)}
+              />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3 text-xs text-zinc-500">
+              <span>Example:</span>
+              <code className="rounded-full border border-zinc-800/70 bg-zinc-950/60 px-3 py-1 text-zinc-300">
+                SELECT * FROM series WHERE value &gt; 118
+              </code>
+              <code className="rounded-full border border-zinc-800/70 bg-zinc-950/60 px-3 py-1 text-zinc-300">
+                SELECT * FROM series WHERE value &gt; 116 AND value &lt; 130
+              </code>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
             <h3 className="text-base font-semibold">Round Snapshot</h3>
             <p className="mt-2 text-sm text-zinc-400">
-              Lightweight scoring mock uses a naive threshold detector to demonstrate the engine
-              flow.
+              Your SQL result set is scored against the hidden anomaly labels.
             </p>
             <div className="mt-6 grid gap-4">
               <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
@@ -180,26 +224,33 @@ const App = () => {
               <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
                 <p className="text-xs uppercase tracking-widest text-zinc-500">Score</p>
                 <p className="mt-2 text-2xl font-semibold text-emerald-300">
-                  {score === null ? '—' : score.toFixed(2)}
+                  {score === null ? '-' : score.toFixed(2)}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
+                <p className="text-xs uppercase tracking-widest text-zinc-500">Rows Returned</p>
+                <p className="mt-2 text-2xl font-semibold text-indigo-300">{lastRows.length}</p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {lastQuery ? 'Last query executed' : 'Run a query to evaluate'}
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
                   <p className="text-[10px] uppercase tracking-widest text-zinc-500">Precision</p>
                   <p className="mt-2 text-sm text-zinc-100">
-                    {precision === null ? '—' : precision.toFixed(2)}
+                    {precision === null ? '-' : precision.toFixed(2)}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
                   <p className="text-[10px] uppercase tracking-widest text-zinc-500">Recall</p>
                   <p className="mt-2 text-sm text-zinc-100">
-                    {recall === null ? '—' : recall.toFixed(2)}
+                    {recall === null ? '-' : recall.toFixed(2)}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
                   <p className="text-[10px] uppercase tracking-widest text-zinc-500">Latency</p>
                   <p className="mt-2 text-sm text-zinc-100">
-                    {latency === null ? '—' : latency.toFixed(2)}
+                    {latency === null ? '-' : latency.toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -261,9 +312,9 @@ const App = () => {
           <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
             <h3 className="text-base font-semibold">Next Steps</h3>
             <ul className="mt-3 text-sm text-zinc-400">
-              <li>Swap the placeholder detector for user-authored models.</li>
-              <li>Track anomaly labels, player actions, and leaderboard scoring.</li>
-              <li>Introduce rounds, time limits, and multiplayer duels.</li>
+              <li>Introduce JOINs and multi-table missions.</li>
+              <li>Score on query efficiency and latency budgets.</li>
+              <li>Add timed duels with head-to-head SQL challenges.</li>
             </ul>
           </div>
         </section>
