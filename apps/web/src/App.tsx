@@ -18,9 +18,14 @@ const App = () => {
     precision,
     recall,
     latency,
+    round,
+    history,
+    leaderboard,
     generate,
     addAnomaly,
     evaluate,
+    nextRound,
+    resetMatch,
   } = useAppStore();
 
   const chartData = series.map((point) => ({
@@ -36,6 +41,7 @@ const App = () => {
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-zinc-500">Prototype</p>
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+            <p className="mt-1 text-xs text-zinc-500">Round {round}</p>
           </div>
           <div className="flex gap-3">
             <button
@@ -58,6 +64,20 @@ const App = () => {
               type="button"
             >
               Score Run
+            </button>
+            <button
+              className="rounded-full border border-sky-500/60 px-4 py-2 text-xs uppercase tracking-widest text-sky-300 transition hover:border-sky-400"
+              onClick={nextRound}
+              type="button"
+            >
+              Next Round
+            </button>
+            <button
+              className="rounded-full border border-rose-500/60 px-4 py-2 text-xs uppercase tracking-widest text-rose-300 transition hover:border-rose-400"
+              onClick={resetMatch}
+              type="button"
+            >
+              Reset Match
             </button>
           </div>
         </div>
@@ -147,6 +167,58 @@ const App = () => {
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold">Leaderboard</h3>
+              <span className="text-xs uppercase tracking-widest text-zinc-500">Top 5</span>
+            </div>
+            <div className="mt-4 space-y-3">
+              {leaderboard.map((entry, index) => (
+                <div
+                  key={`${entry.name}-${entry.round}-${index}`}
+                  className="flex items-center justify-between rounded-2xl border border-zinc-800/70 bg-zinc-950/60 px-4 py-3 text-sm"
+                >
+                  <span className="text-zinc-200">
+                    {index + 1}. {entry.name}
+                  </span>
+                  <span className="text-emerald-300">{entry.score.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold">Round History</h3>
+              <span className="text-xs uppercase tracking-widest text-zinc-500">
+                {history.length} Rounds
+              </span>
+            </div>
+            <div className="mt-4 space-y-3">
+              {history.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-zinc-800/70 bg-zinc-950/40 p-4 text-sm text-zinc-500">
+                  Play a round to capture metrics.
+                </div>
+              )}
+              {history.map((entry) => (
+                <div
+                  key={`round-${entry.round}`}
+                  className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 px-4 py-3 text-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-200">Round {entry.round}</span>
+                    <span className="text-emerald-300">{entry.score.toFixed(2)}</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
+                    <span>Precision {entry.precision.toFixed(2)}</span>
+                    <span>Recall {entry.recall.toFixed(2)}</span>
+                    <span>Latency {entry.latency.toFixed(2)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
