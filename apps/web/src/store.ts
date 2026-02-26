@@ -140,7 +140,7 @@ const parseSql = (sql: string): ParsedQuery => {
 
   for (const part of parts) {
     const inMatch = part.match(/(severity|service)\s+in\s*\(([^)]+)\)/i);
-    if (inMatch) {
+    if (inMatch?.[1] && inMatch[2]) {
       const field = inMatch[1].toLowerCase();
       const values = inMatch[2]
         .split(',')
@@ -152,8 +152,10 @@ const parseSql = (sql: string): ParsedQuery => {
       continue;
     }
 
-    const compMatch = part.match(/(error_rate|duration_min|affected_users)\s*(>=|<=|=|>|<)\s*([0-9.]+)/i);
-    if (compMatch) {
+    const compMatch = part.match(
+      /(error_rate|duration_min|affected_users)\s*(>=|<=|=|>|<)\s*([0-9.]+)/i,
+    );
+    if (compMatch?.[1] && compMatch[2] && compMatch[3]) {
       const fieldRaw = compMatch[1].toLowerCase();
       const operator = compMatch[2];
       const value = Number(compMatch[3]);
@@ -194,9 +196,10 @@ const parseSql = (sql: string): ParsedQuery => {
 
 const runQuery = (dataset: Incident[], parsed: ParsedQuery): Incident[] => {
   const filtered = dataset.filter((row) => parsed.predicates.every((predicate) => predicate(row)));
-  const ordered = parsed.orderBy
+  const orderBy = parsed.orderBy;
+  const ordered = orderBy
     ? [...filtered].sort((a, b) => {
-        const { field, direction } = parsed.orderBy;
+        const { field, direction } = orderBy;
         const compareText = (left: string, right: string): number =>
           direction === 'asc' ? left.localeCompare(right) : right.localeCompare(left);
         const compareNumber = (left: number, right: number): number => {
