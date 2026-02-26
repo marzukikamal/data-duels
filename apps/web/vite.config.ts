@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
 export default defineConfig({
-  base: '/',
+  base: '/data-duels/',
   plugins: [react()],
   resolve: {
     alias: {
