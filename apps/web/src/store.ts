@@ -11,6 +11,7 @@ type AppState = {
   precision: number | null;
   recall: number | null;
   latency: number | null;
+  hasStarted: boolean;
   round: number;
   history: Array<{
     round: number;
@@ -24,6 +25,7 @@ type AppState = {
     score: number;
     round: number;
   }>;
+  start: () => void;
   generate: () => void;
   addAnomaly: () => void;
   evaluate: () => void;
@@ -43,6 +45,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   precision: null,
   recall: null,
   latency: null,
+  hasStarted: false,
   round: 1,
   history: [],
   leaderboard: [
@@ -50,6 +53,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     { name: 'Nova', score: 0.76, round: 1 },
     { name: 'Quill', score: 0.64, round: 1 },
   ],
+  start: () => {
+    set({ hasStarted: true });
+  },
   generate: () => {
     const series = makeSeries();
     set({
@@ -117,6 +123,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   resetMatch: () => {
     set({
       round: 1,
+      hasStarted: false,
       series: makeSeries(),
       anomalies: [],
       predictions: [],

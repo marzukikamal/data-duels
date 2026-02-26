@@ -18,9 +18,11 @@ const App = () => {
     precision,
     recall,
     latency,
+    hasStarted,
     round,
     history,
     leaderboard,
+    start,
     generate,
     addAnomaly,
     evaluate,
@@ -36,6 +38,40 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      {!hasStarted && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/95 px-6">
+          <div className="max-w-2xl text-center">
+            <p className="text-xs uppercase tracking-[0.4em] text-zinc-500">Data Duels</p>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-zinc-100">
+              Detect anomalies. Win rounds. Climb the board.
+            </h1>
+            <p className="mt-4 text-sm text-zinc-400">
+              Inject anomalies into synthetic signals, run a detector, and score on precision,
+              recall, and latency. Each round reshuffles the signal. Your best score tops the
+              leaderboard.
+            </p>
+            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <button
+                className="rounded-full bg-zinc-100 px-6 py-3 text-xs uppercase tracking-widest text-zinc-950 transition hover:bg-white"
+                onClick={start}
+                type="button"
+              >
+                Start Match
+              </button>
+              <button
+                className="rounded-full border border-zinc-700 px-6 py-3 text-xs uppercase tracking-widest text-zinc-200 transition hover:border-zinc-500"
+                onClick={() => {
+                  start();
+                  generate();
+                }}
+                type="button"
+              >
+                Randomize First Round
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="border-b border-zinc-800/70">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
           <div>
