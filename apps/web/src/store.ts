@@ -305,11 +305,11 @@ export const useAppStore = create<AppState>((set, get) => {
       }
       const nextAttempts = attemptsUsed + 1;
       const isExact = lastAnswer !== null && lastAnswer === expectedAnswer;
-      const resultStatus: ResultStatus = isExact ? 'correct' : 'incorrect';
+      const nextStatus: ResultStatus = isExact ? 'correct' : 'incorrect';
       localStorage.setItem(attemptStorageKey(challengeKey), String(nextAttempts));
-      localStorage.setItem(resultStorageKey(challengeKey), resultStatus);
+      localStorage.setItem(resultStorageKey(challengeKey), nextStatus);
       set({
-        resultStatus,
+        resultStatus: nextStatus,
         attemptsUsed: nextAttempts,
         error: null,
       });
