@@ -3,85 +3,47 @@
 const App = () => {
   const {
     title,
-    hasStarted,
     sql,
     lastQuery,
     dataset,
     results,
     resultStatus,
-    attemptUsed,
+    attemptsUsed,
     challengeKey,
     isRunning,
     error,
-    start,
+    solutionSql,
     updateSql,
     runSql,
     submitAnswer,
   } = useAppStore();
 
+  const attemptsLeft = Math.max(0, 5 - attemptsUsed);
+  const showSolution = attemptsUsed >= 5 && resultStatus !== 'correct';
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {!hasStarted && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/95 px-6">
-          <div className="max-w-2xl text-center">
-            <p className="text-xs uppercase tracking-[0.4em] text-zinc-500">Data Duels</p>
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-zinc-100">
-              Daily Incident Triage
-            </h1>
-            <p className="mt-4 text-sm text-zinc-400">
-              One mission per day. Use SQL to identify the exact incidents that need escalation.
-              You only get one official submission.
-            </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <button
-                className="rounded-full bg-zinc-100 px-6 py-3 text-xs uppercase tracking-widest text-zinc-950 transition hover:bg-white"
-                onClick={start}
-                type="button"
-              >
-                Start Mission
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <header className="border-b border-zinc-800/70">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+        <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-zinc-500">Daily Challenge</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-zinc-500">Daily SQL Duel</p>
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
             <p className="mt-1 text-xs text-zinc-500">Challenge #{challengeKey}</p>
           </div>
-          <div className="flex gap-3">
-            <button
-              className="rounded-full border border-indigo-500/60 px-4 py-2 text-xs uppercase tracking-widest text-indigo-300 transition hover:border-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={() => {
-                void runSql();
-              }}
-              type="button"
-              disabled={isRunning || attemptUsed}
-            >
-              {isRunning ? 'Running...' : 'Run SQL'}
-            </button>
-            <button
-              className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs uppercase tracking-widest text-emerald-300 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={submitAnswer}
-              type="button"
-              disabled={attemptUsed}
-            >
-              Submit Answer
-            </button>
+          <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 px-4 py-3 text-xs text-zinc-400">
+            Attempts left today: {attemptsLeft}
           </div>
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-6 py-10 lg:grid-cols-[2fr,1fr]">
+      <main className="mx-auto grid max-w-5xl gap-6 px-6 py-8 lg:grid-cols-[1.2fr,1fr]">
         <section className="space-y-6">
           <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
-            <h2 className="text-lg font-semibold">Mission Brief</h2>
+            <h2 className="text-lg font-semibold">Boardroom Alert</h2>
             <p className="mt-2 text-sm text-zinc-400">
-              Identify the exact set of incidents that must be escalated today. The daily solution
-              is unique; any missing or extra incident fails the submission.
+              A revenue-critical outage report is due in 15 minutes. Pull the exact incidents that
+              must be escalated to the exec on-call list. The answer is unique and must match
+              precisely.
             </p>
             <div className="mt-4 grid gap-3 text-sm text-zinc-300">
               <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
@@ -97,19 +59,40 @@ const App = () => {
           </div>
 
           <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold">SQL Editor (DuckDB)</h3>
-              <span className="text-xs uppercase tracking-widest text-zinc-500">incidents</span>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold">SQL Editor (DuckDB)</h3>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Table: incidents(id, service, severity, duration_min, error_rate, affected_users)
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className="rounded-full border border-indigo-500/60 px-4 py-2 text-xs uppercase tracking-widest text-indigo-300 transition hover:border-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => {
+                    void runSql();
+                  }}
+                  type="button"
+                  disabled={isRunning || attemptsLeft === 0}
+                >
+                  {isRunning ? 'Running...' : 'Run SQL'}
+                </button>
+                <button
+                  className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs uppercase tracking-widest text-emerald-300 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={submitAnswer}
+                  type="button"
+                  disabled={attemptsLeft === 0}
+                >
+                  Submit Answer
+                </button>
+              </div>
             </div>
-            <p className="mt-2 text-sm text-zinc-400">
-              Table columns: id, service, severity, duration_min, error_rate, affected_users
-            </p>
             <div className="mt-4 rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
               <textarea
-                className="h-48 w-full resize-none bg-transparent text-sm text-zinc-100 outline-none"
+                className="h-56 w-full resize-none bg-transparent text-sm text-zinc-100 outline-none"
                 value={sql}
                 onChange={(event) => updateSql(event.target.value)}
-                disabled={attemptUsed}
+                disabled={attemptsLeft === 0}
               />
             </div>
             <p className="mt-3 text-xs text-zinc-500">
@@ -121,6 +104,30 @@ const App = () => {
                 {error}
               </div>
             )}
+          </div>
+
+          {showSolution && (
+            <div className="rounded-3xl border border-amber-500/50 bg-amber-500/10 p-6">
+              <h3 className="text-base font-semibold text-amber-200">Solution Revealed</h3>
+              <pre className="mt-3 whitespace-pre-wrap rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-amber-100">
+                {solutionSql}
+              </pre>
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-6">
+          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
+            <h3 className="text-base font-semibold">Submission Status</h3>
+            <p className="mt-3 text-sm text-zinc-400">
+              {resultStatus === 'pending' && 'Run your query and submit once per attempt.'}
+              {resultStatus === 'correct' && 'Correct. You matched the escalation list.'}
+              {resultStatus === 'incorrect' &&
+                'Incorrect. Adjust your SQL and try again until attempts run out.'}
+            </p>
+            <div className="mt-4 rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4 text-xs text-zinc-400">
+              Attempts used: {attemptsUsed} / 5
+            </div>
           </div>
 
           <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
@@ -166,21 +173,6 @@ const App = () => {
             <p className="mt-2 text-xs text-zinc-500">
               Last query: {lastQuery ? 'executed' : 'not run yet'}
             </p>
-          </div>
-        </section>
-
-        <section className="space-y-6">
-          <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
-            <h3 className="text-base font-semibold">Daily Result</h3>
-            <p className="mt-3 text-sm text-zinc-400">
-              {resultStatus === 'pending' &&
-                'Submit once per day. Your answer must match the exact incident set.'}
-              {resultStatus === 'correct' && 'Correct. You nailed today\'s triage.'}
-              {resultStatus === 'incorrect' && 'Incorrect. Come back tomorrow for a new mission.'}
-            </p>
-            <div className="mt-4 rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4 text-xs text-zinc-400">
-              Attempts left today: {attemptUsed ? '0' : '1'}
-            </div>
           </div>
         </section>
       </main>

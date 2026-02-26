@@ -14,7 +14,6 @@ type ResultStatus = 'pending' | 'correct' | 'incorrect';
 
 type AppState = {
   title: string;
-  hasStarted: boolean;
   sql: string;
   lastQuery: string | null;
   isRunning: boolean;
@@ -23,9 +22,9 @@ type AppState = {
   expectedIds: Set<string>;
   results: Incident[];
   resultStatus: ResultStatus;
-  attemptUsed: boolean;
+  attemptsUsed: number;
   challengeKey: string;
-  start: () => void;
+  solutionSql: string;
   updateSql: (sql: string) => void;
   runSql: () => Promise<void>;
   submitAnswer: () => void;
@@ -49,8 +48,16 @@ type ParsedQuery = {
   complexity: number;
 };
 
-const defaultSql = `-- Incident Triage (Daily)
--- Table: incidents(id, service, severity, duration_min, error_rate, affected_users)
+const solutionSql = `-- Daily Challenge Solution
+SELECT id, service, severity, duration_min, error_rate, affected_users
+FROM incidents
+WHERE severity IN ('critical', 'high')
+  AND service IN ('payments', 'auth')
+  AND error_rate >= 0.08
+  AND duration_min >= 30
+ORDER BY error_rate DESC;`;
+
+const defaultSql = `-- Daily Challenge
 SELECT id, service, severity, duration_min, error_rate, affected_users
 FROM incidents
 WHERE severity IN ('critical', 'high')
@@ -212,17 +219,16 @@ const parseSql = (sql: string): ParsedQuery => {
   };
 };
 
-const attemptStorageKey = (challengeKey: string): string => `data-duels-attempt-${challengeKey}`;
+const attemptStorageKey = (challengeKey: string): string => `data-duels-attempts-${challengeKey}`;
 
 export const useAppStore = create<AppState>((set, get) => {
   const challengeKey = toChallengeKey();
   const seed = seedFromKey(challengeKey);
   const dataset = makeDataset(seed);
   const expectedIds = deriveExpected(dataset);
-  const attemptUsed = localStorage.getItem(attemptStorageKey(challengeKey)) === 'used';
+  const storedAttempts = Number(localStorage.getItem(attemptStorageKey(challengeKey)) ?? '0');
   return {
     title: 'Data Duels',
-    hasStarted: false,
     sql: defaultSql,
     lastQuery: null,
     isRunning: false,
@@ -230,10 +236,10 @@ export const useAppStore = create<AppState>((set, get) => {
     dataset,
     expectedIds,
     results: [],
-    resultStatus: attemptUsed ? 'incorrect' : 'pending',
-    attemptUsed,
+    resultStatus: 'pending',
+    attemptsUsed: storedAttempts,
     challengeKey,
-    start: () => set({ hasStarted: true }),
+    solutionSql,
     updateSql: (sql) => set({ sql }),
     runSql: async () => {
       const { sql, dataset } = get();
@@ -292,19 +298,20 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     },
     submitAnswer: () => {
-      const { attemptUsed, results, expectedIds, challengeKey, sql } = get();
-      if (attemptUsed) {
+      const { attemptsUsed, results, expectedIds, challengeKey, sql } = get();
+      if (attemptsUsed >= 5) {
         return;
       }
       const parsed = parseSql(sql);
       const resultIds = new Set(results.map((row) => row.id));
-      const isExact = resultIds.size === expectedIds.size &&
+      const isExact =
+        resultIds.size === expectedIds.size &&
         [...expectedIds].every((id) => resultIds.has(id));
-      const resultStatus: ResultStatus = isExact ? 'correct' : 'incorrect';
-      localStorage.setItem(attemptStorageKey(challengeKey), 'used');
+      const nextAttempts = attemptsUsed + 1;
+      localStorage.setItem(attemptStorageKey(challengeKey), String(nextAttempts));
       set({
-        resultStatus,
-        attemptUsed: true,
+        resultStatus: isExact ? 'correct' : 'incorrect',
+        attemptsUsed: nextAttempts,
         error: null,
       });
       void parsed;
