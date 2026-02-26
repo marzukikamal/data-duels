@@ -97,7 +97,7 @@ LIMIT 12;`;
 
 type ParsedQuery = {
   predicates: Array<(row: Incident) => boolean>;
-  orderBy: { field: keyof Incident; direction: 'asc' | 'desc' } | null;
+  orderBy: { field: 'id' | 'service' | 'severity' | 'durationMin' | 'errorRate' | 'affectedUsers'; direction: 'asc' | 'desc' } | null;
   limit: number | null;
   complexity: number;
 };
@@ -118,7 +118,7 @@ const parseSql = (sql: string): ParsedQuery => {
     if (!fieldRaw) {
       return null;
     }
-    const fieldMap: Record<string, keyof Incident> = {
+    const fieldMap: Record<string, 'id' | 'service' | 'severity' | 'durationMin' | 'errorRate' | 'affectedUsers'> = {
       id: 'id',
       service: 'service',
       severity: 'severity',
@@ -197,18 +197,29 @@ const runQuery = (dataset: Incident[], parsed: ParsedQuery): Incident[] => {
   const ordered = parsed.orderBy
     ? [...filtered].sort((a, b) => {
         const { field, direction } = parsed.orderBy;
-        if (field === 'id' || field === 'service' || field === 'severity') {
-          const aValue = a[field];
-          const bValue = b[field];
-          return direction === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
-        }
-        if (field === 'durationMin' || field === 'errorRate' || field === 'affectedUsers') {
-          const aValue = a[field];
-          const bValue = b[field];
-          const diff = aValue - bValue;
+        const compareText = (left: string, right: string): number =>
+          direction === 'asc' ? left.localeCompare(right) : right.localeCompare(left);
+        const compareNumber = (left: number, right: number): number => {
+          const diff = left - right;
           return direction === 'asc' ? diff : -diff;
+        };
+
+        switch (field) {
+          case 'id':
+            return compareText(a.id, b.id);
+          case 'service':
+            return compareText(a.service, b.service);
+          case 'severity':
+            return compareText(a.severity, b.severity);
+          case 'durationMin':
+            return compareNumber(a.durationMin, b.durationMin);
+          case 'errorRate':
+            return compareNumber(a.errorRate, b.errorRate);
+          case 'affectedUsers':
+            return compareNumber(a.affectedUsers, b.affectedUsers);
+          default:
+            return 0;
         }
-        return 0;
       })
     : filtered;
 
