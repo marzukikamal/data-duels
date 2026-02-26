@@ -97,13 +97,13 @@ const App = () => {
                   </button>
                   <button
                     className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs uppercase tracking-widest text-emerald-300 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-                    onClick={submitAnswer}
-                    type="button"
-                    disabled={attemptsLeft === 0}
-                  >
-                    Submit Answer
-                  </button>
-                </div>
+                  onClick={submitAnswer}
+                  type="button"
+                  disabled={attemptsLeft === 0 || resultStatus === 'correct'}
+                >
+                  Submit Answer
+                </button>
+              </div>
               </div>
               <div className="mt-4 rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-3">
                 <textarea

@@ -58,12 +58,13 @@ WHERE severity IN ('critical', 'high')
   AND duration_min >= 30;`;
 
 const defaultSql = `-- Daily Challenge
+-- Return a single numeric column named answer
 SELECT COUNT(*) AS answer
 FROM incidents
 WHERE severity IN ('critical', 'high')
   AND service IN ('payments', 'auth')
-  AND error_rate >= 0.08
-  AND duration_min >= 30;`;
+  -- Add the remaining threshold rules here
+;`;
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
@@ -298,8 +299,8 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     },
     submitAnswer: () => {
-      const { attemptsUsed, expectedAnswer, lastAnswer, challengeKey } = get();
-      if (attemptsUsed >= 5) {
+      const { attemptsUsed, expectedAnswer, lastAnswer, challengeKey, resultStatus } = get();
+      if (attemptsUsed >= 5 || resultStatus === 'correct') {
         return;
       }
       const nextAttempts = attemptsUsed + 1;
