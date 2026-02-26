@@ -6,7 +6,6 @@ const App = () => {
     hasStarted,
     sql,
     lastQuery,
-    dataset,
     results,
     score,
     round,
@@ -124,8 +123,8 @@ const App = () => {
               />
             </div>
             <p className="mt-3 text-xs text-zinc-500">
-              Example: SELECT * FROM incidents WHERE severity IN ('critical','high') AND error_rate
-              &gt;= 0.08 ORDER BY error_rate DESC LIMIT 10;
+              Example: SELECT * FROM incidents WHERE severity IN (&apos;critical&apos;,&apos;high&apos;)
+              AND error_rate &gt;= 0.08 ORDER BY error_rate DESC LIMIT 10;
             </p>
           </div>
 
