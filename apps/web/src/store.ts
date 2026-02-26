@@ -197,13 +197,18 @@ const runQuery = (dataset: Incident[], parsed: ParsedQuery): Incident[] => {
   const ordered = parsed.orderBy
     ? [...filtered].sort((a, b) => {
         const { field, direction } = parsed.orderBy;
-        const aValue = a[field];
-        const bValue = b[field];
-        if (typeof aValue === 'string' && typeof bValue === 'string') {
+        if (field === 'id' || field === 'service' || field === 'severity') {
+          const aValue = a[field];
+          const bValue = b[field];
           return direction === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
         }
-        const diff = Number(aValue) - Number(bValue);
-        return direction === 'asc' ? diff : -diff;
+        if (field === 'durationMin' || field === 'errorRate' || field === 'affectedUsers') {
+          const aValue = a[field];
+          const bValue = b[field];
+          const diff = aValue - bValue;
+          return direction === 'asc' ? diff : -diff;
+        }
+        return 0;
       })
     : filtered;
 
