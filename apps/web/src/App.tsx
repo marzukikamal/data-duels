@@ -6,11 +6,14 @@ const App = () => {
     hasStarted,
     sql,
     lastQuery,
+    dataset,
     results,
     score,
     round,
     history,
     leaderboard,
+    isRunning,
+    error,
     start,
     updateSql,
     runSql,
@@ -54,11 +57,12 @@ const App = () => {
           </div>
           <div className="flex gap-3">
             <button
-              className="rounded-full border border-indigo-500/60 px-4 py-2 text-xs uppercase tracking-widest text-indigo-300 transition hover:border-indigo-400"
+              className="rounded-full border border-indigo-500/60 px-4 py-2 text-xs uppercase tracking-widest text-indigo-300 transition hover:border-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={runSql}
               type="button"
+              disabled={isRunning}
             >
-              Run SQL
+              {isRunning ? 'Running...' : 'Run SQL'}
             </button>
             <button
               className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs uppercase tracking-widest text-emerald-300 transition hover:border-emerald-400"
@@ -104,12 +108,15 @@ const App = () => {
               <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
                 Goal: find critical and high severity incidents with elevated error rate
               </div>
+              <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
+                Dataset size: {dataset.length} incidents
+              </div>
             </div>
           </div>
 
           <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold">SQL Editor (T-SQL)</h3>
+              <h3 className="text-base font-semibold">SQL Editor (DuckDB)</h3>
               <span className="text-xs uppercase tracking-widest text-zinc-500">incidents</span>
             </div>
             <p className="mt-2 text-sm text-zinc-400">
@@ -126,6 +133,11 @@ const App = () => {
               Example: SELECT * FROM incidents WHERE severity IN (&apos;critical&apos;,&apos;high&apos;)
               AND error_rate &gt;= 0.08 ORDER BY error_rate DESC LIMIT 10;
             </p>
+            {error && (
+              <div className="mt-4 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
+                {error}
+              </div>
+            )}
           </div>
 
           <div className="rounded-3xl border border-zinc-800/70 bg-zinc-900/30 p-6">

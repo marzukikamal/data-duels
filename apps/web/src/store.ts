@@ -1,4 +1,5 @@
 ﻿import { create } from 'zustand';
+import { getDuckDb } from './duckdb';
 
 type Incident = {
   id: string;
@@ -21,6 +22,8 @@ type AppState = {
   hasStarted: boolean;
   sql: string;
   lastQuery: string | null;
+  isRunning: boolean;
+  error: string | null;
   dataset: Incident[];
   expectedIds: Set<string>;
   results: Incident[];
@@ -30,7 +33,7 @@ type AppState = {
   leaderboard: Array<{ name: string; score: number; round: number }>;
   start: () => void;
   updateSql: (sql: string) => void;
-  runSql: () => void;
+  runSql: () => Promise<void>;
   scoreRun: () => void;
   nextRound: () => void;
   resetMatch: () => void;
@@ -38,6 +41,21 @@ type AppState = {
 
 const services = ['payments', 'auth', 'search', 'analytics', 'checkout', 'profile'] as const;
 const severities = ['low', 'medium', 'high', 'critical'] as const;
+
+type OrderField =
+  | 'id'
+  | 'service'
+  | 'severity'
+  | 'durationMin'
+  | 'errorRate'
+  | 'affectedUsers';
+
+type ParsedQuery = {
+  predicates: Array<(row: Incident) => boolean>;
+  orderBy: { field: OrderField; direction: 'asc' | 'desc' } | null;
+  limit: number | null;
+  complexity: number;
+};
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
@@ -95,13 +113,6 @@ WHERE severity IN ('critical', 'high')
 ORDER BY error_rate DESC
 LIMIT 12;`;
 
-type ParsedQuery = {
-  predicates: Array<(row: Incident) => boolean>;
-  orderBy: { field: 'id' | 'service' | 'severity' | 'durationMin' | 'errorRate' | 'affectedUsers'; direction: 'asc' | 'desc' } | null;
-  limit: number | null;
-  complexity: number;
-};
-
 const parseSql = (sql: string): ParsedQuery => {
   const lower = sql.toLowerCase();
   const whereMatch = lower.split('where')[1] ?? '';
@@ -118,7 +129,7 @@ const parseSql = (sql: string): ParsedQuery => {
     if (!fieldRaw) {
       return null;
     }
-    const fieldMap: Record<string, 'id' | 'service' | 'severity' | 'durationMin' | 'errorRate' | 'affectedUsers'> = {
+    const fieldMap: Record<string, OrderField> = {
       id: 'id',
       service: 'service',
       severity: 'severity',
@@ -263,6 +274,8 @@ export const useAppStore = create<AppState>((set, get) => {
     hasStarted: false,
     sql: defaultSql,
     lastQuery: null,
+    isRunning: false,
+    error: null,
     dataset,
     expectedIds: deriveExpected(dataset),
     results: [],
@@ -276,11 +289,61 @@ export const useAppStore = create<AppState>((set, get) => {
     ],
     start: () => set({ hasStarted: true }),
     updateSql: (sql) => set({ sql }),
-    runSql: () => {
+    runSql: async () => {
       const { sql, dataset } = get();
-      const parsed = parseSql(sql);
-      const results = runQuery(dataset, parsed);
-      set({ lastQuery: sql, results });
+      set({ isRunning: true, error: null });
+      try {
+        const db = await getDuckDb();
+        const conn = await db.connect();
+        await conn.query('DROP TABLE IF EXISTS incidents');
+        await conn.query(`
+          CREATE TABLE incidents (
+            id VARCHAR,
+            service VARCHAR,
+            severity VARCHAR,
+            duration_min INTEGER,
+            error_rate DOUBLE,
+            affected_users INTEGER
+          );
+        `);
+
+        const jsonRows = dataset.map((row) => ({
+          id: row.id,
+          service: row.service,
+          severity: row.severity,
+          duration_min: row.durationMin,
+          error_rate: row.errorRate,
+          affected_users: row.affectedUsers,
+        }));
+        await db.registerFileText('incidents.json', JSON.stringify(jsonRows));
+        await conn.query("INSERT INTO incidents SELECT * FROM read_json_auto('incidents.json')");
+
+        const result = await conn.query(sql);
+        const rows = result.toArray().map((row) => row.toJSON()) as Record<string, unknown>[];
+        const results: Incident[] = rows
+          .map((row) => {
+            const id = row.id;
+            if (typeof id !== 'string') {
+              return null;
+            }
+            const severity = String(row.severity ?? 'low');
+            return {
+              id,
+              service: String(row.service ?? 'unknown'),
+              severity: (severity as Incident['severity']) ?? 'low',
+              durationMin: Number(row.duration_min ?? row.durationMin ?? 0),
+              errorRate: Number(row.error_rate ?? row.errorRate ?? 0),
+              affectedUsers: Number(row.affected_users ?? row.affectedUsers ?? 0),
+            };
+          })
+          .filter((row): row is Incident => row !== null);
+        await conn.close();
+        set({ lastQuery: sql, results });
+      } catch (error) {
+        set({ error: error instanceof Error ? error.message : 'SQL execution failed' });
+      } finally {
+        set({ isRunning: false });
+      }
     },
     scoreRun: () => {
       const { results, expectedIds, round, history, leaderboard, sql } = get();
