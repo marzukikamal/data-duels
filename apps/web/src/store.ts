@@ -45,8 +45,13 @@ const clamp = (value: number, min: number, max: number): number =>
 const randomInt = (min: number, max: number): number =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
-const randomChoice = <T,>(items: readonly T[]): T =>
-  items[Math.floor(Math.random() * items.length)] ?? items[0];
+const randomChoice = <T,>(items: readonly T[]): T => {
+  const fallback = items[0];
+  if (fallback === undefined) {
+    throw new Error('randomChoice requires a non-empty array');
+  }
+  return items[Math.floor(Math.random() * items.length)] ?? fallback;
+};
 
 const makeDataset = (): Incident[] => {
   const rows: Incident[] = [];
@@ -122,7 +127,7 @@ const parseSql = (sql: string): ParsedQuery => {
       affected_users: 'affectedUsers',
     };
     const field = fieldMap[fieldRaw] ?? 'errorRate';
-    const direction = directionRaw === 'asc' ? 'asc' : 'desc';
+    const direction: 'asc' | 'desc' = directionRaw === 'asc' ? 'asc' : 'desc';
     return { field, direction };
   })();
 
@@ -152,7 +157,7 @@ const parseSql = (sql: string): ParsedQuery => {
       const fieldRaw = compMatch[1].toLowerCase();
       const operator = compMatch[2];
       const value = Number(compMatch[3]);
-      const fieldMap: Record<string, keyof Incident> = {
+      const fieldMap: Record<string, 'errorRate' | 'durationMin' | 'affectedUsers'> = {
         error_rate: 'errorRate',
         duration_min: 'durationMin',
         affected_users: 'affectedUsers',
@@ -191,8 +196,7 @@ const runQuery = (dataset: Incident[], parsed: ParsedQuery): Incident[] => {
   const filtered = dataset.filter((row) => parsed.predicates.every((predicate) => predicate(row)));
   const ordered = parsed.orderBy
     ? [...filtered].sort((a, b) => {
-        const field = parsed.orderBy?.field ?? 'errorRate';
-        const direction = parsed.orderBy?.direction ?? 'desc';
+        const { field, direction } = parsed.orderBy;
         const aValue = a[field];
         const bValue = b[field];
         if (typeof aValue === 'string' && typeof bValue === 'string') {
